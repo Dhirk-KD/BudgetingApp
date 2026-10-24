@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="icon.png">
 <title>Budget</title>
 <!-- All the design (colours, spacing, layout) lives in style.css -->
-<link rel="stylesheet" href="Style.css">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <!-- Every page is drawn into this <main> by JavaScript -->
@@ -52,6 +52,8 @@ let S;try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
 S=S||{inc:[],exp:[],cats:['Rent','Car Insurance','Phone','Groceries','Transport','Eating Out','Subscriptions','Other'].map((n,i)=>({n,b:0,c:COL[i]}))};
 // First run of this design version: use light mode and create an empty savings goal
 if(S.v!==2){S.v=2;S.t='light';S.goal=S.goal||{n:'Savings goal',g:0,s:0}}
+// ens: makes sure every list/setting exists (fixed bills S.fx, income sources S.fi, profile S.pf, goal S.goal)
+const ens=()=>{S.goal=S.goal||{n:'Savings goal',g:0,s:0};S.pf=S.pf||{name:'',tm:'p',tv:0};if(S.pf.tv===undefined){S.pf.tm='p';S.pf.tv=S.pf.sv||0}S.tg=S.tg||{};S.fx=S.fx||[];S.fi=S.fi||[]};ens();
 // save: writes S back to storage. Called after every change.
 const save=()=>localStorage.setItem(K,JSON.stringify(S));
 // Screen state: cur = month being viewed, tab = current page, sel = highlighted donut slice,
@@ -70,7 +72,7 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
 // col: finds a category's colour by its name
 const col=n=>(S.cats.find(c=>c.n===n)||{c:'#8a94a8'}).c;
 // ic: builds a round coloured icon
-const ic=(n,c,e)=>`<span class="ic" style="background:${c}">${e||IC[n.toLowerCase()]||esc(n[0].toUpperCase())}</span>`;
+const ic=(n,c,e)=>`<span class="ic" style="background:${c}">${e||(S.cats.find(x=>x.n==n)||{}).e||IC[n.toLowerCase()]||esc(n[0].toUpperCase())}</span>`;
 // months: the last 12 months, newest first
 const months=()=>[...Array(12)].map((_,k)=>shift(TM,-k));
 // tot: adds up one month. Returns i = income, e = expenses, by = expenses per category,
@@ -120,13 +122,13 @@ function home(){
   extra=S.cats.filter(c=>c.b>0).map(c=>{const v=by[c.n]||0,p=v/c.b*100,k=p>100?'var(--bad)':c.c;return `<div class="bit"><div class="top">${ic(c.n,c.c)}<div>${esc(c.n)}<br><small>${fm(v)} / ${fm(c.b)}</small></div><b style="color:${k}">${p.toFixed(0)}%</b></div><div class="bar"><u style="width:${Math.min(p,100)}%;background:${k}"></u></div></div>`}).join('')
    ||'<div class="empty">Set category budgets from the menu (top right) &rarr; Budgets &amp; settings.</div>'}
  const seg=[['ov','Overview'],['in','Income'],['bu','Expenses']].map(([k,l])=>`<button class="${dv==k?'on':''}" onclick="dv='${k}';sel=-1;render()">${l}</button>`).join('');
- return hd('Dashboard',1)+`<div class="sheet">${stats(t)}<div class="seg">${seg}</div>${note?`<div class="bn"><i>i</i>${esc(note)}</div>`:''}${dn(items,pill,top,main,sub)}${extra?'<h3 style="margin-top:20px">Budget items</h3>'+extra:''}</div>`}
+ return hd(S.pf.name?'Hi, '+esc(S.pf.name):'Dashboard',1)+`<div class="sheet">${stats(t)}${fxCard()}<div class="seg">${seg}</div>${note?`<div class="bn"><i>i</i>${esc(note)}</div>`:''}${dn(items,pill,top,main,sub)}${extra?'<h3 style="margin-top:20px">Budget items</h3>'+extra:''}</div>`}
 // Transactions page: income and expenses for the month, grouped by date, with delete buttons
 function txp(){
  const t=tot(cur),L=[...S.inc.filter(x=>x.d.startsWith(cur)).map(x=>({...x,k:'inc',t:x.s})),...S.exp.filter(x=>x.d.startsWith(cur)).map(x=>({...x,k:'exp',t:x.cat}))].sort((a,b)=>b.d.localeCompare(a.d)||b.id-a.id);
  let h='',last='';
  L.forEach(x=>{if(x.d!==last){last=x.d;h+=`<h3 class="dh">${x.d==today?'Today':x.d==yest?'Yesterday':x.d}</h3>`}
-  h+=`<div class="tx">${x.k=='inc'?ic(x.t,'#4caf50','💵'):ic(x.t,col(x.t))}<div>${esc(x.t)}<br><small>${x.k=='inc'?'Income':'Expense'}${x.n?' | '+esc(x.n):''}</small></div><b class="${x.k=='inc'?'ok':'bad'}">${x.k=='inc'?'':'−'}${fm(x.a)}</b><button onclick="del('${x.k}',${x.id})">✕</button></div>`});
+  h+=`<div class="tx" onclick="editTx('${x.k}',${x.id})">${x.k=='inc'?ic(x.t,'#4caf50','💵'):ic(x.t,col(x.t))}<div>${esc(x.t)}<br><small>${x.k=='inc'?'Income':'Expense'}${x.n?' | '+esc(x.n):''}</small></div><b class="${x.k=='inc'?'ok':'bad'}">${x.k=='inc'?'':'−'}${fm(x.a)}</b><button onclick="event.stopPropagation();del('${x.k}',${x.id})">✕</button></div>`});
  return hd('Transactions',1)+`<div class="sheet">${stats(t)}${h||'<div class="empty">No transactions this month.</div>'}</div>`}
 // Savings page: this month's savings, goal progress bar, saved-vs-remaining donut and the goal editor.
 // Total saved = starting amount + (income minus expenses) added up over every month logged.
@@ -135,7 +137,7 @@ function savp(){
  const net=ms.reduce((a,m)=>a+tot(m).n,0),saved=G.s+net,g=G.g,pct=g>0?Math.max(0,Math.min(saved/g*100,100)):0;
  const avg=ms.length?net/ms.length:0,eta=g>saved&&avg>0?Math.ceil((g-saved)/avg):0;
  const items=g>0?[{n:'Saved',v:Math.max(saved,0),c:SV},{n:'Remaining',v:Math.max(g-saved,0),c:'#90a4ae'}].filter(x=>x.v>0):[];
- return hd('Savings',1)+`<div class="sheet"><div class="box"><small>Saved in ${lab(cur,1)}</small><div class="big2 ${t.n<0?'bad':'ok'}">${fm(t.n)}</div><small>${t.i>0?(t.n/t.i*100).toFixed(0)+'% of income':'Add income to see your savings rate'}</small></div>
+ return hd('Savings',1)+`<div class="sheet"><div class="box"><small>Saved in ${lab(cur,1)}</small><div class="big2 ${t.n<0?'bad':'ok'}">${fm(t.n)}</div><small>${t.i>0?(t.n/t.i*100).toFixed(0)+'% of income':'Add income to see your savings rate'}${tgtTxt(t)}</small></div>
  <h3>${esc(G.n)}</h3><div class="box"><div class="cr" style="margin:0"><div><b>${fm(saved)}</b><span class="r">${g>0?'of '+fm(g):'no goal set'}</span></div><div class="bar"><u style="width:${pct}%;background:${SV}"></u></div></div><small>${g>0?pct.toFixed(0)+'% reached'+(eta?` · about ${eta} month${eta>1?'s':''} to go at your average`:saved>=g?' · goal reached! 🎉':''):'Set a target below'}</small></div>
  ${items.length?`<div class="dn" style="width:200px"><svg viewBox="0 0 42 42">${ring(items,-1)}</svg><div class="ct"><small>Goal</small><b>${pct.toFixed(0)}%</b></div></div>`+items.map(x=>`<div class="lr">${ic(x.n,x.c,x.n=='Saved'?'💰':'🎯')}<div>${x.n}</div><b>${fm(x.v)}</b></div>`).join(''):''}
  <h3 style="margin-top:20px">Edit goal</h3><input value="${esc(G.n)}" placeholder="Goal name" onchange="S.goal.n=this.value;save();render()"><input type="number" inputmode="decimal" value="${G.g||''}" placeholder="Target amount" onchange="S.goal.g=parseFloat(this.value)||0;save();render()"><input type="number" inputmode="decimal" value="${G.s||''}" placeholder="Already saved before using the app" onchange="S.goal.s=parseFloat(this.value)||0;save();render()"><small>Total saved = starting amount + income minus spending from every month you've logged.</small></div>`}
@@ -164,53 +166,183 @@ function cmpv(){
  <small>${lab(cs)}${ch==null?'':' vs '+lab(shift(cs,-1),1)}</small>
  <div class="bc mc" style="margin-top:14px"><div class="ax">${[0,1,2,3,4].map(k=>`<span>${kf(mx*k/4)}</span>`).join('')}</div><div class="pl">${ml.map((m,j)=>`<div class="gc" onclick="cs='${m}';render()"><div class="gr"><u style="height:${Math.max(v[j],0)/mx*100}%;background:${m==cs?'var(--hd)':'var(--bb)'}"></u></div><small>${sm(m)}</small></div>`).join('')}</div></div>
  <h3 style="margin-top:22px">${lab(cs)}</h3>${rows.length?rows.map(([ico,k,a,c])=>`<div class="lr">${ico}<div>${esc(k)}</div><b class="${c}">${fm(a)}</b></div>`).join(''):'<div class="empty">Nothing recorded this month.</div>'}</div>`}
-// Settings page: category budgets, add/delete categories, theme, backup export/import, delete all
+
+// ===== 4b. FIXED BILLS =====
+// addDays: a date plus n days (as a Date). dl: short date like "Nov 6". ord: 1 -> 1st, 2 -> 2nd, 3 -> 3rd...
+const addDays=(s,n)=>{const d=new Date(s+'T00:00');d.setDate(d.getDate()+n);return d};
+const dl=d=>new Date(d+'T00:00').toLocaleDateString('en-CA',{month:'short',day:'numeric'});
+const ord=n=>n+((n%100>=11&&n%100<=13)?'th':['th','st','nd','rd'][n%10]||'th');
+// isPaid: has this bill occurrence (key = billId@dueDate) already been added to your expenses?
+const isPaid=k=>S.exp.some(x=>x.fx==k);
+// occ: the due dates of fixed bill b inside month m. Monthly bills use the due day (short months use their last day);
+// "every 2 weeks" bills count forward from their first due date.
+function occ(b,m){
+ const[y,mo]=m.split('-').map(Number),dim=new Date(y,mo,0).getDate();
+ if(b.rep=='m')return m<b.m0?[]:[`${m}-${pad(Math.min(b.day,dim))}`];
+ const r=[];
+ for(let k=0;k<300;k++){const d=ymd(addDays(b.start,14*k));if(d.slice(0,7)>m)break;if(d.startsWith(m))r.push(d)}
+ return r}
+// fxSum: total fixed bills due this month (t) and how much of it is already paid (p)
+function fxSum(){let t=0,p=0;S.fx.forEach(b=>occ(b,TM).forEach(d=>{t+=b.a;if(isPaid(b.id+'@'+d))p+=b.a}));return{t,p}}
+// fxCard: the small "Fixed bills" card on the Dashboard (tap it to open the Fixed bills page)
+function fxCard(){const{t,p}=fxSum();return t?`<div class="fcard" onclick="go('fix')"><div class="cr" style="margin:0"><div><b>Fixed bills</b><span class="r">${fm(p)} of ${fm(t)} paid</span></div><div class="bar"><u style="width:${p/t*100}%;background:#00c853"></u></div></div><small>${p<t?'Still to pay this month: '+fm(t-p):'All paid this month'}</small></div>`:''}
+// sync: adds anything that is due but missing. Runs when the app opens or comes back to the screen.
+// Auto-add bills become expenses on/after their due day.
+// Anything you deleted (stored in S.sk) is not added again.
+function sync(){
+ let c=0;const sk=S.sk||[];
+ [shift(TM,-1),TM].forEach(m=>S.fx.filter(b=>b.auto).forEach(b=>occ(b,m).forEach(d=>{
+  const k=b.id+'@'+d;
+  if(d<=today&&!isPaid(k)&&!sk.includes(k))S.exp.push({id:Date.now()+c++,cat:b.cat,a:b.a,d,n:b.n,fx:k})})));
+ if(c)save()}
+// payFx: tap the check mark on a bill to add it to your expenses (early payments use today's date)
+const payFx=k=>{const[id,d]=k.split('@'),b=S.fx.find(x=>x.id==id);if(b&&!isPaid(k)){S.exp.push({id:Date.now(),cat:b.cat,a:b.a,d:d>today?today:d,n:b.n,fx:k});save();render()}};
+// fixp: the Fixed bills page. One row per bill showing this month's status (Paid, Due in N days, Overdue...)
+function fixp(){
+ const{t,p}=fxSum();
+ const rows=S.fx.map(b=>{
+  const o=occ(b,TM),k=o.map(d=>b.id+'@'+d),un=o.findIndex((d,j)=>!isPaid(k[j])),all=o.length>0&&un<0;
+  const d=o.length?o[un<0?o.length-1:un]:(occ(b,shift(TM,1))[0]||b.start),key=b.id+'@'+d;
+  const dd=Math.round((new Date(d+'T00:00')-new Date(today+'T00:00'))/864e5);
+  const[cl,tx]=all?['ok2','Paid']:dd<0?['bd','Overdue']:dd==0?['wn','Due today']:dd<=7?['wn',`Due in ${dd} day${dd>1?'s':''}`]:['','Due '+dl(d)];
+  return `<div class="tx" onclick="editFx(${b.id})">${ic(b.cat,col(b.cat))}<div>${esc(b.n)}<br><small>${fm(b.a)} · ${b.rep=='m'?'due the '+ord(b.day):'every 2 weeks'} · ${b.auto?'auto-add':'confirm'}</small></div><span class="chip ${cl}">${tx}</span>${!all&&o.length?`<button onclick="event.stopPropagation();payFx('${key}')">✓</button>`:''}</div>`}).join('');
+ return hd('Fixed bills')+`<div class="sheet"><div class="cr" style="margin-top:0"><div><b>Paid this month</b><span class="r">${fm(p)} of ${fm(t)}</span></div><div class="bar"><u style="width:${t?p/t*100:0}%;background:#00c853"></u></div></div>
+ <h3 style="margin-top:18px">Your bills</h3>${rows||'<div class="empty">No fixed bills yet.<br>Add rent, insurance, phone and more.</div>'}
+ <h3 style="margin-top:18px">Quick add</h3><div class="ch" style="flex-wrap:wrap"><button class="cp" onclick="qf('Rent','Rent')">Rent</button><button class="cp" onclick="qf('Car insurance','Car Insurance')">Car insurance</button><button class="cp" onclick="qf('Phone','Phone')">Phone</button></div>
+ <button class="b1" onclick="newFx()">+ Add fixed bill</button><small>Tap a bill to edit it. A changed amount applies from now on; past expenses stay as they were.</small></div>`}
+// ----- Fixed bill form (fr holds the bill being edited; fr.id = 0 means a new bill) -----
+let fr=null;
+const newFx=()=>{fr={id:0,n:'',a:'',c:0,rep:'m',day:1,start:today,auto:true};drawFx()};
+const editFx=id=>{const b=S.fx.find(x=>x.id==id);fr={...b,a:String(b.a),c:Math.max(0,S.cats.findIndex(c=>c.n==b.cat))};drawFx()};
+const qf=(n,c)=>{newFx();fr.n=n;fr.c=Math.max(0,S.cats.findIndex(x=>x.n==c));drawFx()};
+const closeFx=()=>{fr=null;closeAdd()};
+function drawFx(){
+ $('#sh').innerHTML=`<div class="ad"><div class="ah" style="background:#2196f3"><div class="ar"><button onclick="closeFx()">←</button><b>${fr.id?'Edit fixed bill':'New fixed bill'}</b><span style="width:26px"></span></div><small>Amount (CAD)</small><input class="big" type="number" inputmode="decimal" step="0.01" placeholder="0.00" value="${esc(fr.a)}" oninput="fr.a=this.value" id="a"></div>
+ <div class="ab"><input id="fn" placeholder="Name (e.g. Rent)" value="${esc(fr.n)}" oninput="fr.n=this.value">
+ <div class="cgr">${S.cats.map((c,i)=>`<button class="cg ${fr.c==i?'on':''}" onclick="fr.c=${i};drawFx()">${ic(c.n,c.c)}<small>${esc(c.n)}</small></button>`).join('')}</div>
+ <select onchange="fr.rep=this.value;drawFx()"><option value="m" ${fr.rep=='m'?'selected':''}>Repeats monthly</option><option value="b" ${fr.rep=='b'?'selected':''}>Repeats every 2 weeks</option></select>
+ ${fr.rep=='m'?`<input type="number" min="1" max="31" inputmode="numeric" placeholder="Due day of the month (1-31)" value="${fr.day}" oninput="fr.day=+this.value">`:`<small>First due date</small><input type="date" value="${fr.start}" onchange="fr.start=this.value">`}
+ <div class="tgl" onclick="fr.auto=!fr.auto;drawFx()"><div>Add automatically on due day<br><small>${fr.auto?'On: appears in your expenses by itself':'Off: you tap the check mark each time'}</small></div><span class="sw ${fr.auto?'on':''}"><i></i></span></div>
+ ${fr.id?'<button class="b3" onclick="delFx()">Delete bill</button>':''}</div><button class="okb" onclick="saveFx()">✓</button></div>`;
+ $('#sh').classList.add('open')}
+// saveFx: checks the form, saves the bill (new or edited), then runs sync so auto-add bills that are already due appear right away
+function saveFx(){
+ const a=parseFloat(fr.a),n=fr.n.trim();
+ if(!(a>0))return $('#a').focus();
+ if(!n)return $('#fn').focus();
+ const b={id:fr.id||Date.now(),n,a,cat:(S.cats[fr.c]||{n:'Other'}).n,rep:fr.rep,day:Math.min(31,Math.max(1,fr.day||1)),start:fr.start||today,auto:fr.auto,m0:fr.m0||TM};
+ if(fr.id)S.fx[S.fx.findIndex(x=>x.id==fr.id)]=b;else S.fx.push(b);
+ save();closeFx();sync();render()}
+const delFx=()=>{if(confirm('Delete this bill? Expenses already added stay.')){S.fx=S.fx.filter(x=>x.id!=fr.id);save();closeFx();render()}};
+// ===== 4c. INCOME CALCULATOR, SAVINGS TARGET & CATEGORY EDITOR =====
+// tgt: this month's savings target in dollars (a fixed amount, or a % of that month's income).
+// tgtTxt: the target text shown on the Savings page.
+const tgt=t=>S.pf.tm=='a'?S.pf.tv||0:t.i*(S.pf.tv||0)/100;
+const tgtTxt=t=>{const g=tgt(t);return g>0?` · target ${fm(g)}${S.pf.tm=='p'?' ('+S.pf.tv+'% of income)':''}${t.n>=g?' · reached ✓':''}`:''};
+// need: a suggested monthly income target = your category budgets (or fixed bills if no budgets are set) plus your savings target
+function need(){
+ const B=S.cats.reduce((a,c)=>a+(c.b||0),0),E=B>0?B:fxSum().t,tv=S.pf.tv||0;
+ return Math.ceil(S.pf.tm=='a'?E+tv:tv<100?E/(1-tv/100):E)}
+// calcp: Income calculator page (for irregular freelance income). Set a target for the month shown, then see
+// how much you have earned, what is left, and what you need per week / per day / in jobs to get there.
+function calcp(){
+ const t=tot(cur),g=S.tg[cur]||0,[y,mo]=cur.split('-').map(Number),dim=new Date(y,mo,0).getDate();
+ const left=cur==TM?dim-D.getDate()+1:cur>TM?dim:0,done=cur==TM?D.getDate():cur<TM?dim:0;
+ const rem=Math.max(g-t.i,0),pct=g>0?Math.min(t.i/g*100,100):0,nd=need(),jb=S.pf.job||0,nj=jb>0?Math.ceil(rem/jb):0;
+ const past=months().filter(m=>S.tg[m]).slice(0,6).map(m=>{const i=tot(m).i,q=S.tg[m];return `<div class="lr"><div>${lab(m)}<br><small>${fm(i)} of ${fm(q)}</small></div><b class="${i>=q?'ok':''}">${(i/q*100).toFixed(0)}%</b></div>`}).join('');
+ return hd('Income goal',1)+`<div class="sheet"><small>Income target for ${lab(cur)}</small>
+ <input type="number" inputmode="decimal" placeholder="How much do you need to make?" value="${g||''}" onchange="S.tg[cur]=parseFloat(this.value)||0;save();render()" style="margin-top:6px">
+ ${nd>0?`<div class="bn"><i>i</i><span>Your budgets and savings target add up to about <b>${fm(nd)}</b> a month.</span><button class="cp" onclick="S.tg[cur]=${nd};save();render()">Use</button></div>`:'<small>Set category budgets and a savings target to get a suggested amount.</small>'}
+ ${g>0?`<div class="box"><div class="cr" style="margin:0"><div><b>${fm(t.i)}</b><span class="r">of ${fm(g)}</span></div><div class="bar"><u style="width:${pct}%;background:#00c853"></u></div></div><small>${rem>0?fm(rem)+' still to go':'Target reached 🎉'}</small></div>
+ ${rem>0&&left>0?`<div class="st"><div><small>Days left</small><b>${left}</b></div><div><small>Per week</small><b>${fm(rem/Math.max(left/7,1))}</b></div><div><small>Per day</small><b>${fm(rem/left)}</b></div></div>`:''}
+ ${cur==TM&&done>0&&t.i>0?`<small>At your pace so far you would end the month near ${fm(t.i/done*dim)}. Freelance income comes in lumps, so treat this as a rough guide.</small>`:''}
+ <h3 style="margin-top:16px">Jobs needed</h3><input type="number" inputmode="decimal" placeholder="Average pay per job or project" value="${jb||''}" onchange="S.pf.job=parseFloat(this.value)||0;save();render()">${nj>0?`<p>About <b>${nj}</b> more job${nj>1?'s':''} at ${fm(jb)} each.</p>`:''}`:''}
+ ${past?'<h3 style="margin-top:18px">Past targets</h3>'+past:''}</div>`}
+// ----- Category editor (opened from Budgets & settings). ce = the category being edited:
+// i = its position (-1 = new), o = old name, n = name, e = emoji icon, c = colour, b = monthly budget -----
+const EM=['🏠','🚗','📱','🛒','🚌','🍔','🔁','🧾','💰','📖','👕','🎁','💊','☕','🎬','🎮','✈️','🐶','👶','💡','🔧','🏋️','📚','🍺','💇','🎵','🧴','💻','🎓','⛽','🏥','🛠️'];
+const PAL=['#2196f3','#ab47bc','#ff9800','#8bc34a','#ef5350','#26a69a','#5c6bc0','#ffca28','#8d6e63','#ec407a','#00acc1','#607d8b'];
+let ce=null;
+const editCat=i=>{const c=S.cats[i];ce={i,o:c.n,n:c.n,e:c.e||IC[c.n.toLowerCase()]||'🏷️',c:c.c,b:c.b||0};drawCe()};
+const newCat=()=>{ce={i:-1,o:'',n:'',e:'🏷️',c:PAL[S.cats.length%PAL.length],b:0};drawCe()};
+const closeCe=()=>{ce=null;closeAdd()};
+function drawCe(){
+ $('#sh').innerHTML=`<div class="ad"><div class="ah" style="background:${ce.c}"><div class="ar"><button onclick="closeCe()">←</button><b>${ce.i<0?'New category':'Edit category'}</b><span style="width:26px"></span></div><div style="display:flex;align-items:center;gap:12px"><span class="ic" style="background:#fff3;width:52px;height:52px;font-size:26px">${ce.e}</span><input class="big" style="font-size:24px" placeholder="Name" value="${esc(ce.n)}" oninput="ce.n=this.value" id="cn"></div></div>
+ <div class="ab"><h3>Icon</h3><div class="eg">${EM.map(e=>`<button class="eb ${ce.e==e?'on':''}" onclick="ce.e='${e}';drawCe()">${e}</button>`).join('')}</div>
+ <h3>Colour</h3><div class="eg">${PAL.map(c=>`<button class="sb ${ce.c==c?'on':''}" style="background:${c}" onclick="ce.c='${c}';drawCe()"></button>`).join('')}<input type="color" class="cpick" value="${ce.c}" onchange="ce.c=this.value;drawCe()"></div>
+ <h3>Monthly budget</h3><input type="number" inputmode="decimal" placeholder="0" value="${ce.b||''}" oninput="ce.b=parseFloat(this.value)||0">
+ ${ce.i>=0?'<button class="b3" onclick="delCe()">Remove category</button>':''}</div><button class="okb" onclick="saveCe()">✓</button></div>`;
+ $('#sh').classList.add('open')}
+// saveCe: saves a new or edited category. Renaming also renames it on your past expenses and fixed bills.
+function saveCe(){
+ const n=ce.n.trim();
+ if(!n)return $('#cn').focus();
+ if(S.cats.some((c,j)=>c.n.toLowerCase()==n.toLowerCase()&&j!==ce.i)){alert('You already have a category with that name.');return}
+ const c={n,b:ce.b||0,c:ce.c,e:ce.e};
+ if(ce.i<0)S.cats.push(c);
+ else{if(ce.o!==n){S.exp.forEach(x=>{if(x.cat==ce.o)x.cat=n});S.fx.forEach(x=>{if(x.cat==ce.o)x.cat=n})}S.cats[ce.i]=c}
+ save();closeCe();render()}
+const delCe=()=>{if(confirm('Remove this category? Expenses already logged keep its name.')){S.cats.splice(ce.i,1);save();closeCe();render()}};
+// sett: Budgets & settings page. Tap a category to edit its name, icon, colour and budget; add or remove categories.
 function sett(){
- return hd('Budgets & settings')+`<div class="sheet"><h3>Monthly budget per category</h3>${S.cats.map((c,i)=>`<div class="bi">${ic(c.n,c.c)}<span>${esc(c.n)}</span><input type="number" inputmode="decimal" value="${c.b||''}" placeholder="0" onchange="S.cats[${i}].b=parseFloat(this.value)||0;save()"><button onclick="delCat(${i})">✕</button></div>`).join('')}
- <div class="bi"><input id="nc" placeholder="New category" style="width:auto;flex:1"><button class="b2" style="width:auto;padding:10px 16px;border-radius:12px;color:var(--tx)" onclick="addCat()">Add</button></div><br>
- <button class="b2" onclick="S.t=S.t=='dark'?'light':'dark';save();render()">Switch to ${S.t=='dark'?'light':'dark'} mode</button><button class="b2" onclick="exp()">Export backup</button><button class="b2" onclick="$('#f').click()">Import backup</button><input id="f" type="file" accept=".json" hidden onchange="imp(this)"><button class="b3" onclick="if(confirm('Delete ALL data?')){S.inc=[];S.exp=[];save();render()}">Delete all data</button></div>`}
+ return hd('Budgets & settings')+`<div class="sheet"><h3>Categories &amp; monthly budgets</h3>${S.cats.map((c,i)=>`<div class="bi"><span onclick="editCat(${i})" style="display:flex;align-items:center;gap:10px;cursor:pointer">${ic(c.n,c.c)}${esc(c.n)}<small>✎</small></span><input type="number" inputmode="decimal" value="${c.b||''}" placeholder="0" onchange="S.cats[${i}].b=parseFloat(this.value)||0;save()"><button onclick="delCat(${i})">✕</button></div>`).join('')}
+ <button class="b1" onclick="newCat()" style="margin-top:8px">+ Add category</button><small>Tap a category to change its icon and colour.</small><br><br>
+ <button class="b3" onclick="if(confirm('Delete ALL data?')){S.inc=[];S.exp=[];save();render()}">Delete all data</button></div>`}
+// ----- Profile page: name, savings target (amount or % of income), theme, backup -----
+function prof(){
+ const nm=S.pf.name.trim(),ini=nm?nm.split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase():'?';
+ const ms=new Set([...S.inc,...S.exp].map(x=>x.d.slice(0,7))),saved=S.goal.s+[...ms].reduce((a,m)=>a+tot(m).n,0);
+ return hd('Profile')+`<div class="sheet"><div class="pv"><div class="av">${esc(ini)}</div><input placeholder="Your name" value="${esc(S.pf.name)}" onchange="S.pf.name=this.value;save();render()" style="margin:0"></div>
+ <div class="st"><div><small>Months tracked</small><b>${ms.size}</b></div><div><small>Total saved</small><b class="${saved<0?'bad':'ok'}">${fm(saved)}</b></div></div>
+ <h3>Monthly savings target</h3><div class="seg"><button class="${S.pf.tm=='a'?'on':''}" onclick="S.pf.tm='a';save();render()">Amount</button><button class="${S.pf.tm=='p'?'on':''}" onclick="S.pf.tm='p';save();render()">% of income</button></div>
+ <input type="number" inputmode="decimal" value="${S.pf.tv||''}" placeholder="${S.pf.tm=='a'?'Dollars per month, e.g. 300':'Percent of monthly income, e.g. 20'}" onchange="S.pf.tv=parseFloat(this.value)||0;save()">
+ <small>${S.pf.tm=='a'?'The same fixed amount every month.':'Changes with the income you log each month.'}</small>
+ <h3 style="margin-top:16px">App</h3><button class="b2" onclick="S.t=S.t=='dark'?'light':'dark';save();render()">Switch to ${S.t=='dark'?'light':'dark'} mode</button><button class="b2" onclick="exp()">Export backup</button><button class="b2" onclick="$('#f').click()">Import backup</button><input id="f" type="file" accept=".json" hidden onchange="imp(this)"></div>`}
 // ===== 5. SCREEN CONTROLS =====
 // render: redraws the current page and highlights the matching nav button. Called after every change.
 function render(){
  document.documentElement.dataset.t=S.t;
- $('main').innerHTML={home,tx:txp,sav:savp,hist,cmp:cmpv,set:sett}[tab]();
+ $('main').innerHTML={home,tx:txp,sav:savp,fix:fixp,calc:calcp,pro:prof,hist,cmp:cmpv,set:sett}[tab]();
  const nt=tab;
  document.querySelectorAll('nav [data-t]').forEach(b=>b.classList.toggle('on',b.dataset.t==nt))}
 // go = switch page, mv = previous/next month, pick = highlight/unhighlight a donut slice
 const go=t=>{tab=t;render();scrollTo(0,0)},mv=k=>{cur=shift(cur,k);sel=-1;render()},pick=i=>{sel=sel===i?-1:i;render()};
 // menu: opens (1) or closes (0) the slide-out page menu (the ☰ button, top right). Lists every page; the current one is highlighted.
 function menu(o){
- if(o)$('#dr').innerHTML=`<div class="dw"><h3>Pages</h3>${[['home','Dashboard','◔'],['tx','Transactions','☰'],['sav','Savings','◈'],['hist','History','📅'],['cmp','Compare','⇄'],['set','Budgets &amp; settings','⚙']].map(([k,l,g])=>`<button class="${tab==k?'on':''}" onclick="menu(0);go('${k}')"><span>${g}</span>${l}</button>`).join('')}</div>`;
+ if(o)$('#dr').innerHTML=`<div class="dw"><h3>Pages</h3>${[['home','Dashboard','◔'],['tx','Transactions','☰'],['sav','Savings','◈'],['fix','Fixed bills','🔁'],['calc','Income calculator','🎯'],['hist','History','📅'],['cmp','Compare','⇄'],['pro','Profile','👤'],['set','Budgets &amp; settings','⚙']].map(([k,l,g])=>`<button class="${tab==k?'on':''}" onclick="menu(0);go('${k}')"><span>${g}</span>${l}</button>`).join('')}</div>`;
  $('#dr').classList.toggle('open',!!o)}
-// del = delete a transaction, delCat = delete a category, addCat = add a category (Settings)
-const del=(k,id)=>{S[k]=S[k].filter(x=>x.id!==id);save();render()};
-const delCat=i=>{S.cats.splice(i,1);save();render()};
-function addCat(){const n=$('#nc').value.trim();if(n){S.cats.push({n,b:0,c:COL[S.cats.length%COL.length]});save();render()}}
+// del = delete a transaction, delCat = delete a category (Settings)
+const del=(k,id)=>{const x=S[k].find(y=>y.id===id);if(x&&x.fx){S.sk=S.sk||[];S.sk.push(x.fx)}S[k]=S[k].filter(y=>y.id!==id);save();render()};
+const delCat=i=>{if(confirm('Remove this category? Expenses already logged keep its name.')){S.cats.splice(i,1);save();render()}};
 // ===== 6. ADD INCOME / EXPENSE FORM =====
 // openAdd: draws the full-screen form (green for income, blue for expense). Typed values are kept in dr.
 function openAdd(){
  const inc=kind=='inc',hc=inc?'#4caf50':'#2196f3',srcs=[...new Set(S.inc.map(x=>x.s))];
  if(dr.c>=S.cats.length)dr.c=0;
- $('#sh').innerHTML=`<div class="ad"><div class="ah" style="background:${hc}"><div class="ar"><button onclick="closeAdd()">←</button><b>${inc?'New Income':'New Expense'}</b><div class="tg"><button class="${inc?'':'on'}" onclick="kind='exp';openAdd()">Expense</button><button class="${inc?'on':''}" onclick="kind='inc';openAdd()">Income</button></div></div><small>Amount (CAD)</small><input class="big" type="number" inputmode="decimal" step="0.01" placeholder="0.00" value="${esc(dr.a)}" oninput="dr.a=this.value" id="a"></div>
+ $('#sh').innerHTML=`<div class="ad"><div class="ah" style="background:${hc}"><div class="ar"><button onclick="closeAdd()">←</button><b>${dr.e?'Edit':'New'} ${inc?'Income':'Expense'}</b>${dr.e?'<span style="width:26px"></span>':`<div class="tg"><button class="${inc?'':'on'}" onclick="kind='exp';openAdd()">Expense</button><button class="${inc?'on':''}" onclick="kind='inc';openAdd()">Income</button></div>`}</div><small>Amount (CAD)</small><input class="big" type="number" inputmode="decimal" step="0.01" placeholder="0.00" value="${esc(dr.a)}" oninput="dr.a=this.value" id="a"></div>
  <div class="ab"><div class="ch">${[['Today',today],['Yesterday',yest]].map(([l,d])=>`<button class="cp ${dr.d==d?'on':''}" onclick="dr.d='${d}';openAdd()">${l}</button>`).join('')}<input type="date" value="${dr.d}" onchange="dr.d=this.value;openAdd()"></div>
  ${inc?`<input placeholder="Source (e.g. Job 1, Side gig)" value="${esc(dr.s)}" oninput="dr.s=this.value"><div class="ch" style="flex-wrap:wrap">${srcs.map(s=>`<button class="cp" data-s="${esc(s)}" onclick="dr.s=this.dataset.s;openAdd()">${esc(s)}</button>`).join('')}</div>`:`<div class="cgr">${S.cats.map((c,i)=>`<button class="cg ${dr.c==i?'on':''}" onclick="dr.c=${i};openAdd()">${ic(c.n,c.c)}<small>${esc(c.n)}</small></button>`).join('')}</div>`}
  <input placeholder="Description (optional)" value="${esc(dr.n)}" oninput="dr.n=this.value"></div><button class="okb" onclick="add()">✓</button></div>`;
  $('#sh').classList.add('open')}
 // closeAdd: hides the form and clears the draft
 const closeAdd=()=>{$('#sh').classList.remove('open');$('#sh').innerHTML='';dr={a:'',d:today,n:'',s:'',c:dr.c}};
+// editTx: tap a transaction to change it. Opens the same form as + with the details filled in (dr.e = the item being edited).
+const editTx=(k,id)=>{const x=(k=='exp'?S.exp:S.inc).find(y=>y.id===id);if(!x)return;kind=k;dr={a:String(x.a),d:x.d,n:x.n||'',s:x.s||'',c:Math.max(0,S.cats.findIndex(c=>c.n==x.cat)),e:id};openAdd()};
 // add: checks the amount, saves the new income/expense, then shows the Dashboard for that month
 function add(){
  const a=parseFloat(dr.a);if(!(a>0))return $('#a').focus();
  const d=dr.d||today,id=Date.now(),n=dr.n.trim();
- if(kind=='exp')S.exp.push({id,cat:(S.cats[dr.c]||{n:'Other'}).n,a,d,n});else S.inc.push({id,s:(dr.s||'').trim()||'Income',a,d,n});
- cur=d.slice(0,7);sel=-1;save();closeAdd();go('home')}
+ const ed=!!dr.e,o=kind=='exp'?{cat:(S.cats[dr.c]||{n:'Other'}).n,a,d,n}:{s:(dr.s||'').trim()||'Income',a,d,n},list=kind=='exp'?S.exp:S.inc;
+ if(ed){const x=list.find(y=>y.id===dr.e);if(x)Object.assign(x,o)}else list.push({id,...o});
+ cur=d.slice(0,7);sel=-1;save();closeAdd();go(ed?'tx':'home')}
 // ===== 7. BACKUP =====
 // exp: downloads all your data as a .json file. imp: restores your data from one.
 function exp(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));a.download='budget-backup-'+today+'.json';a.click()}
-function imp(f){const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.cats||!d.exp||!d.inc)throw 0;S=d;if(!S.goal)S.goal={n:'Savings goal',g:0,s:0};save();render()}catch(e){alert('Invalid backup file')}};r.readAsText(f.files[0])}
+function imp(f){const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.cats||!d.exp||!d.inc)throw 0;S=d;ens();save();render()}catch(e){alert('Invalid backup file')}};r.readAsText(f.files[0])}
 // ===== 8. START THE APP =====
 // Draw the first screen, then register the service worker (lets the app work offline)
-render();
+sync();render();
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){sync();render()}});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>

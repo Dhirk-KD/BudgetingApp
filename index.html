@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<!-- BUDGET APP - one file with 3 parts: HEAD (setup), STYLE (how it looks), SCRIPT (what it does). Your data is saved only on your phone. -->
+<html lang="en-CA" data-t="light">
+<head>
+<meta charset="utf-8">
+<!-- Makes the page fit phone screens and extend under the notch -->
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- iPhone "Add to Home Screen" settings: full-screen app, status bar style, app name -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Budget">
+<meta name="theme-color" content="#2196f3">
+<!-- Files that make the app installable: manifest.json (app info) and icon.png (home-screen icon) -->
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<title>Budget</title>
+<!-- ===== STYLES: colours, spacing and layout ===== -->
+<style>
+/* Colour theme variables (light mode). Change colours here. */
+:root{--bg:#e9ecf1;--card:#fff;--tx:#1d2330;--mu:#8791a3;--ln:#eceff4;--hd:#2196f3;--ok:#2eb872;--bad:#ef4b4b}
+/* Dark mode overrides (switched on in Settings) */
+[data-t=dark]{--bg:#06090f;--card:#151b27;--tx:#e8ecf4;--mu:#8a94a8;--ln:#232b3b;--hd:#1565c0}
+/* Basic page setup */
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px system-ui,-apple-system,sans-serif;padding-bottom:calc(92px + env(safe-area-inset-bottom))}
+main{max-width:520px;margin:auto;background:var(--card);min-height:100vh}
+button{font:inherit;color:inherit}
+small{color:var(--mu);font-size:12px}h3{margin:0 0 10px;font-size:13px;color:var(--mu);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+/* Blue header at the top of each page, plus the month switcher */
+.hd{background:var(--hd);color:#fff;padding:calc(env(safe-area-inset-top) + 16px) 18px 40px;position:relative}
+.ht{font-size:20px;font-weight:600;text-align:center}.bk{position:absolute;left:12px;top:calc(env(safe-area-inset-top) + 10px);background:none;border:0;color:#fff;font-size:26px}
+.mo{display:flex;justify-content:center;align-items:center;gap:22px;margin-top:12px;font-size:14px;letter-spacing:1px}
+.mo button{background:#fff3;border:0;color:#fff;width:32px;height:32px;border-radius:50%;font-size:18px}
+/* White rounded sheet that holds each page's content */
+.sheet{background:var(--card);border-radius:26px 26px 0 0;margin-top:-24px;padding:18px;position:relative;min-height:70vh;animation:up .35s ease both}
+@keyframes up{from{opacity:0;transform:translateY(12px)}}
+/* Income / Spent / Saved summary row */
+.st{display:flex;justify-content:space-around;text-align:center;padding-bottom:14px;border-bottom:1px solid var(--ln);margin-bottom:16px}.st b{display:block;font-size:15px}
+/* Donut chart and the text in its centre */
+.dn{position:relative;width:240px;margin:6px auto 18px}.dn svg{width:100%}
+.ct{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center}.ct b{font-size:20px}
+/* Round coloured category icons, legend rows and transaction rows */
+.ic{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:18px;color:#fff;flex:none}
+.lr,.tx{display:flex;align-items:center;gap:12px;padding:10px 6px;border-radius:14px;transition:background .2s}.lr.on{background:var(--ln)}
+.lr>div,.tx>div{flex:1;line-height:1.3}.lr>b,.tx>b{text-align:right;font-size:15px}
+.dh{margin:14px 0 4px}
+.tx button{background:none;border:0;color:var(--mu);font-size:16px;padding:4px}
+/* Progress bars (budgets, history, compare) */
+.cr{margin:14px 0 0}.cr>div:first-child{display:flex;align-items:center;gap:8px}.r{margin-left:auto;font-size:13px}
+.bar{height:8px;background:var(--ln);border-radius:9px;margin-top:6px;overflow:hidden}.bar u{display:block;height:100%;border-radius:9px;transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.empty{text-align:center;color:var(--mu);padding:28px 0;line-height:1.6}
+/* "More" page rows, boxes, form inputs and buttons */
+.row{display:flex;align-items:center;gap:14px;padding:14px 4px;border-bottom:1px solid var(--ln);cursor:pointer}.row span{margin-left:auto;color:var(--mu)}
+.box{border:1px solid var(--ln);border-radius:18px;padding:14px;margin-bottom:14px}
+.big2{font-size:30px;font-weight:700}
+.pk{display:flex;align-items:center;gap:10px}
+select,input{width:100%;padding:13px;margin-bottom:10px;border-radius:12px;border:1px solid var(--ln);background:var(--bg);color:var(--tx);font:inherit}
+.b1,.b2,.b3{width:100%;padding:14px;border-radius:14px;border:0;font-weight:600;margin-bottom:8px}.b1{background:var(--hd);color:#fff}.b2{background:var(--ln)}.b3{background:none;color:var(--bad);border:1px solid var(--bad)}
+.bi{display:flex;gap:8px;align-items:center;margin-bottom:8px}.bi span{flex:1}.bi input{width:110px;margin:0;padding:10px}.bi button{background:none;border:0;color:var(--mu);font-size:18px}
+/* Bottom navigation bar and the round + button */
+nav{position:fixed;bottom:0;left:0;right:0;max-width:520px;margin:auto;display:flex;justify-content:space-around;align-items:center;background:var(--card);border-top:1px solid var(--ln);padding:8px 4px calc(8px + env(safe-area-inset-bottom))}
+nav button{background:none;border:0;color:var(--mu);font-size:10px;display:flex;flex-direction:column;align-items:center;gap:2px;width:72px}nav button span{font-size:20px}nav button.on{color:var(--hd)}
+nav .fab{width:56px;height:56px;border-radius:50%;background:#2979ff;color:#fff;font-size:30px;margin-top:-30px;justify-content:center;box-shadow:0 8px 20px #2979ff66}
+/* Add screen (full-screen form): header, date chips, category grid, save button */
+#sh{position:fixed;inset:0;z-index:9;display:none;background:var(--card);overflow:auto}#sh.open{display:block}
+.ad{max-width:520px;margin:auto}.ah{color:#fff;padding:calc(env(safe-area-inset-top) + 14px) 18px 22px}
+.ar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.ar>button{background:none;border:0;color:#fff;font-size:26px}
+.tg{display:flex;background:#0003;border-radius:12px;padding:3px}.tg button{border:0;background:none;color:#fffb;padding:6px 10px;border-radius:9px;font-size:13px}.tg .on{background:#fff;color:#333}
+.ah small{color:#fffc}.ah input.big{background:none;border:0;color:#fff;font-size:38px;font-weight:700;padding:0;margin:0}.ah input::placeholder{color:#fff8}
+.ab{padding:16px 18px 100px}.ch{display:flex;gap:8px;margin-bottom:14px;align-items:center}.ch input{width:auto;margin:0;flex:1}
+.cp{border:0;background:var(--ln);padding:10px 14px;border-radius:20px;font-size:14px}.cp.on{background:#4caf50;color:#fff}
+.cgr{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.cg{background:none;border:2px solid transparent;border-radius:14px;padding:6px 2px;display:flex;flex-direction:column;align-items:center;gap:4px}.cg.on{border-color:var(--hd);background:var(--ln)}.cg small{font-size:11px;text-align:center}
+.okb{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom));left:50%;margin-left:-28px;width:56px;height:56px;border-radius:50%;border:0;background:#00c853;color:#fff;font-size:26px;box-shadow:0 8px 20px #00c85377}
+</style>
+</head>
+<body>
+<!-- Every page is drawn into this <main> by JavaScript -->
+<main></main>
+<!-- Bottom navigation bar; the + button opens the Add form -->
+<nav>
+<button data-t="home" onclick="go('home')"><span>◔</span>Dashboard</button>
+<button data-t="tx" onclick="go('tx')"><span>☰</span>Transactions</button>
+<button class="fab" onclick="openAdd()">+</button>
+<button data-t="sav" onclick="go('sav')"><span>◈</span>Savings</button>
+<button data-t="more" onclick="go('more')"><span>⋯</span>More</button>
+</nav>
+<!-- The full-screen "New Expense / New Income" form is drawn in here -->
+<div id="sh"></div>
+<!-- ===== APP LOGIC (JavaScript) ===== -->
+<script>
+// ===== 1. BASIC SETUP =====
+// K = the name your data is saved under in the phone's browser storage
+// $ = shortcut to find an element on the page; pad = adds a leading zero (5 becomes 05)
+const K='budget-v1',$=s=>document.querySelector(s),pad=n=>String(n).padStart(2,'0');
+// Colours for new categories (COL) and the green used for the Savings slice (SV)
+const COL=['#2196f3','#ab47bc','#ff9800','#8bc34a','#ef5350','#26a69a','#5c6bc0','#ffca28','#8d6e63','#ec407a'],SV='#00c853';
+// Emoji for each category's round icon (unknown names show their first letter)
+const IC={rent:'🏠','car insurance':'🚗',phone:'📱',groceries:'🛒',transport:'🚌','eating out':'🍔',subscriptions:'🔁',other:'🧾',savings:'💰',education:'📖',clothing:'👕',gift:'🎁',health:'💊'};
+// Today and yesterday as YYYY-MM-DD text, and the current month (TM) as YYYY-MM
+const D=new Date(),ymd=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`,today=ymd(D),yest=ymd(new Date(D.getTime()-864e5)),TM=today.slice(0,7);
+// ===== 2. YOUR DATA =====
+// S holds everything: income list, expense list, categories (with budgets), savings goal and theme.
+// It is loaded from storage; if nothing is saved yet, it starts with default categories.
+let S;try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
+S=S||{inc:[],exp:[],cats:['Rent','Car Insurance','Phone','Groceries','Transport','Eating Out','Subscriptions','Other'].map((n,i)=>({n,b:0,c:COL[i]}))};
+// First run of this design version: use light mode and create an empty savings goal
+if(S.v!==2){S.v=2;S.t='light';S.goal=S.goal||{n:'Savings goal',g:0,s:0}}
+// save: writes S back to storage. Called after every change.
+const save=()=>localStorage.setItem(K,JSON.stringify(S));
+// Screen state: cur = month being viewed, tab = current page, sel = highlighted donut slice,
+// kind = "exp" or "inc" in the Add form, cmp = the two months being compared,
+// dr = the Add form's draft values (amount, date, note, source, category)
+let cur=TM,tab='home',sel=-1,kind='exp',cmp=[TM,shift(TM,-1)],dr={a:'',d:today,n:'',s:'',c:0};
+// ===== 3. HELPER FUNCTIONS =====
+// shift: moves a month forward/back, e.g. shift("2026-10",-1) gives "2026-09"
+function shift(m,k){const[y,mo]=m.split('-').map(Number),d=new Date(y,mo-1+k,1);return `${d.getFullYear()}-${pad(d.getMonth()+1)}`}
+// fm: formats a number as Canadian dollars
+const fm=n=>n.toLocaleString('en-CA',{style:'currency',currency:'CAD'});
+// lab: turns "2026-10" into "October 2026" (or "Oct 2026" when s is set)
+const lab=(m,s)=>new Date(m+'-01T00:00').toLocaleDateString('en-CA',{month:s?'short':'long',year:'numeric'});
+// esc: makes typed text safe to show on the page
+const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+// col: finds a category's colour by its name
+const col=n=>(S.cats.find(c=>c.n===n)||{c:'#8a94a8'}).c;
+// ic: builds a round coloured icon
+const ic=(n,c,e)=>`<span class="ic" style="background:${c}">${e||IC[n.toLowerCase()]||esc(n[0].toUpperCase())}</span>`;
+// months: the last 12 months, newest first
+const months=()=>[...Array(12)].map((_,k)=>shift(TM,-k));
+// tot: adds up one month. Returns i = income, e = expenses, by = expenses per category,
+// n = income minus expenses (your savings)
+function tot(m){const by={};let e=0;S.exp.filter(x=>x.d.startsWith(m)).forEach(x=>{by[x.cat]=(by[x.cat]||0)+x.a;e+=x.a});const i=S.inc.filter(x=>x.d.startsWith(m)).reduce((a,x)=>a+x.a,0);return{i,e,by,n:i-e}}
+// ring: draws the donut. Each item becomes a coloured arc sized by its share of the total.
+function ring(items,k){
+ const T=items.reduce((a,x)=>a+x.v,0);let off=0;
+ return items.map((x,j)=>{const p=x.v/T*100,l=Math.max(p-.8,.1),s=`<circle r="15.915" cx="21" cy="21" fill="none" stroke="${x.c}" stroke-width="${k===j?6:4.2}" stroke-dasharray="${l} ${100-l}" stroke-dashoffset="${25-off}" onclick="pick(${j})" style="cursor:pointer;transition:stroke-width .2s"/>`;off+=p;return s}).join('')}
+// hd: builds the blue header (title, optional month switcher, optional back button)
+const hd=(t,mo,bk)=>`<div class="hd">${bk?`<button class="bk" onclick="go('${bk}')">←</button>`:''}<div class="ht">${t}</div>${mo?`<div class="mo"><button onclick="mv(-1)">‹</button><b>${lab(cur).toUpperCase()}</b><button onclick="mv(1)">›</button></div>`:''}</div>`;
+// stats: builds the Income / Spent / Saved row
+const stats=t=>`<div class="st"><div><small>Income</small><b class="ok">${fm(t.i)}</b></div><div><small>Spent</small><b class="bad">${fm(t.e)}</b></div><div><small>Saved</small><b class="${t.n<0?'bad':'ok'}">${fm(t.n)}</b></div></div>`;
+// ===== 4. PAGES (each function returns the HTML for one screen) =====
+// Dashboard: donut of income = expenses by category + leftover savings, then legend and budget bars
+function home(){
+ const t=tot(cur),{i,e,by,n}=t;
+ const items=Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([nm,v])=>({n:nm,v,c:col(nm)}));if(n>0)items.push({n:'Savings',v:n,c:SV});
+ const T=items.reduce((a,x)=>a+x.v,0),c=items[sel];
+ const chart=T?`<div class="dn"><svg viewBox="0 0 42 42">${ring(items,sel)}</svg><div class="ct"><small>${c?esc(c.n):i?'Income':'Spent'}</small><b>${fm(c?c.v:i||e)}</b><small class="${!c&&n<0?'bad':''}">${c?(c.v/T*100).toFixed(1)+'%':n<0?'Over by '+fm(-n):''}</small></div></div>`+
+  items.map((x,j)=>`<div class="lr ${sel===j?'on':''}" onclick="pick(${j})">${ic(x.n,x.c)}<div>${esc(x.n)}<br><small>${(x.v/T*100).toFixed(1)}%</small></div><b class="${x.n=='Savings'?'ok':''}">${fm(x.v)}</b></div>`).join(''):'<div class="empty">Nothing yet this month.<br>Tap + to add income or an expense.</div>';
+ const bg=S.cats.filter(c=>c.b>0).map(c=>{const v=by[c.n]||0;return `<div class="cr"><div>${esc(c.n)}<span class="r">${fm(v)} / ${fm(c.b)}</span></div><div class="bar"><u style="width:${Math.min(v/c.b*100,100)}%;background:${v>c.b?'var(--bad)':c.c}"></u></div></div>`}).join('');
+ return hd('Dashboard',1)+`<div class="sheet">${stats(t)}${chart}${bg?'<h3 style="margin-top:22px">Budgets</h3>'+bg:''}</div>`}
+// Transactions page: income and expenses for the month, grouped by date, with delete buttons
+function txp(){
+ const t=tot(cur),L=[...S.inc.filter(x=>x.d.startsWith(cur)).map(x=>({...x,k:'inc',t:x.s})),...S.exp.filter(x=>x.d.startsWith(cur)).map(x=>({...x,k:'exp',t:x.cat}))].sort((a,b)=>b.d.localeCompare(a.d)||b.id-a.id);
+ let h='',last='';
+ L.forEach(x=>{if(x.d!==last){last=x.d;h+=`<h3 class="dh">${x.d==today?'Today':x.d==yest?'Yesterday':x.d}</h3>`}
+  h+=`<div class="tx">${x.k=='inc'?ic(x.t,'#4caf50','💵'):ic(x.t,col(x.t))}<div>${esc(x.t)}<br><small>${x.k=='inc'?'Income':'Expense'}${x.n?' | '+esc(x.n):''}</small></div><b class="${x.k=='inc'?'ok':'bad'}">${x.k=='inc'?'':'−'}${fm(x.a)}</b><button onclick="del('${x.k}',${x.id})">✕</button></div>`});
+ return hd('Transactions',1)+`<div class="sheet">${stats(t)}${h||'<div class="empty">No transactions this month.</div>'}</div>`}
+// Savings page: this month's savings, goal progress bar, saved-vs-remaining donut and the goal editor.
+// Total saved = starting amount + (income minus expenses) added up over every month logged.
+function savp(){
+ const t=tot(cur),G=S.goal,ms=[...new Set([...S.inc,...S.exp].map(x=>x.d.slice(0,7)))];
+ const net=ms.reduce((a,m)=>a+tot(m).n,0),saved=G.s+net,g=G.g,pct=g>0?Math.max(0,Math.min(saved/g*100,100)):0;
+ const avg=ms.length?net/ms.length:0,eta=g>saved&&avg>0?Math.ceil((g-saved)/avg):0;
+ const items=g>0?[{n:'Saved',v:Math.max(saved,0),c:SV},{n:'Remaining',v:Math.max(g-saved,0),c:'#90a4ae'}].filter(x=>x.v>0):[];
+ return hd('Savings',1)+`<div class="sheet"><div class="box"><small>Saved in ${lab(cur,1)}</small><div class="big2 ${t.n<0?'bad':'ok'}">${fm(t.n)}</div><small>${t.i>0?(t.n/t.i*100).toFixed(0)+'% of income':'Add income to see your savings rate'}</small></div>
+ <h3>${esc(G.n)}</h3><div class="box"><div class="cr" style="margin:0"><div><b>${fm(saved)}</b><span class="r">${g>0?'of '+fm(g):'no goal set'}</span></div><div class="bar"><u style="width:${pct}%;background:${SV}"></u></div></div><small>${g>0?pct.toFixed(0)+'% reached'+(eta?` · about ${eta} month${eta>1?'s':''} to go at your average`:saved>=g?' · goal reached! 🎉':''):'Set a target below'}</small></div>
+ ${items.length?`<div class="dn" style="width:200px"><svg viewBox="0 0 42 42">${ring(items,-1)}</svg><div class="ct"><small>Goal</small><b>${pct.toFixed(0)}%</b></div></div>`+items.map(x=>`<div class="lr">${ic(x.n,x.c,x.n=='Saved'?'💰':'🎯')}<div>${x.n}</div><b>${fm(x.v)}</b></div>`).join(''):''}
+ <h3 style="margin-top:20px">Edit goal</h3><input value="${esc(G.n)}" placeholder="Goal name" onchange="S.goal.n=this.value;save();render()"><input type="number" inputmode="decimal" value="${G.g||''}" placeholder="Target amount" onchange="S.goal.g=parseFloat(this.value)||0;save();render()"><input type="number" inputmode="decimal" value="${G.s||''}" placeholder="Already saved before using the app" onchange="S.goal.s=parseFloat(this.value)||0;save();render()"><small>Total saved = starting amount + income minus spending from every month you've logged.</small></div>`}
+// More page: links to History, Compare and Settings
+function more(){return hd('More')+`<div class="sheet"><div class="row" onclick="go('hist')">${ic('H','#5c6bc0','📅')}History (12 months)<span>›</span></div><div class="row" onclick="go('cmp')">${ic('C','#ff9800','⇄')}Compare months<span>›</span></div><div class="row" onclick="go('set')">${ic('S','#26a69a','⚙')}Budgets &amp; settings<span>›</span></div></div>`}
+// History page: last 12 months with income/spending bars; tap a month to open it
+function hist(){
+ const t=months().map(m=>({m,...tot(m)})),mx=Math.max(1,...t.map(x=>Math.max(x.i,x.e)));
+ return hd('History',0,'more')+`<div class="sheet">`+t.map(x=>`<div class="box" onclick="cur='${x.m}';sel=-1;go('home')"><div class="cr" style="margin:0"><div><b>${lab(x.m)}</b><span class="r ${x.n<0?'bad':'ok'}">Saved ${fm(x.n)}</span></div></div><div class="bar"><u style="width:${x.i/mx*100}%;background:#4caf50"></u></div><div class="bar"><u style="width:${x.e/mx*100}%;background:var(--hd)"></u></div><small>In ${fm(x.i)} · Out ${fm(x.e)}</small></div>`).join('')+'<small>Tap a month to open it.</small></div>'}
+// Compare page: pick two months and see the spending difference per category
+function cmpv(){
+ const opt=v=>months().map(m=>`<option value="${m}" ${m===v?'selected':''}>${lab(m)}</option>`).join('');
+ const[A,B]=cmp.map(tot),names=[...new Set([...Object.keys(A.by),...Object.keys(B.by)])],mx=Math.max(1,...names.map(n=>Math.max(A.by[n]||0,B.by[n]||0))),d=A.e-B.e;
+ const row=n=>{const a=A.by[n]||0,b=B.by[n]||0,x=a-b;return `<div class="cr"><div>${esc(n)}<span class="r ${x>0?'bad':x<0?'ok':''}">${x>0?'▲':x<0?'▼':''} ${fm(Math.abs(x))}</span></div><div class="bar"><u style="width:${a/mx*100}%;background:var(--hd)"></u></div><div class="bar"><u style="width:${b/mx*100}%;background:var(--mu)"></u></div></div>`};
+ return hd('Compare',0,'more')+`<div class="sheet"><div class="pk"><select onchange="cmp[0]=this.value;render()" style="margin:0">${opt(cmp[0])}</select><span>vs</span><select onchange="cmp[1]=this.value;render()" style="margin:0">${opt(cmp[1])}</select></div>
+ <div class="st" style="margin-top:16px"><div><small>${lab(cmp[0],1)}</small><b>${fm(A.e)}</b><small>saved ${fm(A.n)}</small></div><div><small>${lab(cmp[1],1)}</small><b>${fm(B.e)}</b><small>saved ${fm(B.n)}</small></div></div>
+ <p class="${d>0?'bad':'ok'}">${d==0?'Same spending':fm(Math.abs(d))+(d>0?' more':' less')+' spent in '+lab(cmp[0],1)}</p><h3>By category</h3><small>Blue = first month · grey = second</small>${names.length?names.map(row).join(''):'<div class="empty">No data for these months.</div>'}</div>`}
+// Settings page: category budgets, add/delete categories, theme, backup export/import, delete all
+function sett(){
+ return hd('Budgets & settings',0,'more')+`<div class="sheet"><h3>Monthly budget per category</h3>${S.cats.map((c,i)=>`<div class="bi">${ic(c.n,c.c)}<span>${esc(c.n)}</span><input type="number" inputmode="decimal" value="${c.b||''}" placeholder="0" onchange="S.cats[${i}].b=parseFloat(this.value)||0;save()"><button onclick="delCat(${i})">✕</button></div>`).join('')}
+ <div class="bi"><input id="nc" placeholder="New category" style="width:auto;flex:1"><button class="b2" style="width:auto;padding:10px 16px;border-radius:12px;color:var(--tx)" onclick="addCat()">Add</button></div><br>
+ <button class="b2" onclick="S.t=S.t=='dark'?'light':'dark';save();render()">Switch to ${S.t=='dark'?'light':'dark'} mode</button><button class="b2" onclick="exp()">Export backup</button><button class="b2" onclick="$('#f').click()">Import backup</button><input id="f" type="file" accept=".json" hidden onchange="imp(this)"><button class="b3" onclick="if(confirm('Delete ALL data?')){S.inc=[];S.exp=[];save();render()}">Delete all data</button></div>`}
+// ===== 5. SCREEN CONTROLS =====
+// render: redraws the current page and highlights the matching nav button. Called after every change.
+function render(){
+ document.documentElement.dataset.t=S.t;
+ $('main').innerHTML={home,tx:txp,sav:savp,more,hist,cmp:cmpv,set:sett}[tab]();
+ const nt=['hist','cmp','set'].includes(tab)?'more':tab;
+ document.querySelectorAll('nav [data-t]').forEach(b=>b.classList.toggle('on',b.dataset.t==nt))}
+// go = switch page, mv = previous/next month, pick = highlight/unhighlight a donut slice
+const go=t=>{tab=t;render();scrollTo(0,0)},mv=k=>{cur=shift(cur,k);sel=-1;render()},pick=i=>{sel=sel===i?-1:i;render()};
+// del = delete a transaction, delCat = delete a category, addCat = add a category (Settings)
+const del=(k,id)=>{S[k]=S[k].filter(x=>x.id!==id);save();render()};
+const delCat=i=>{S.cats.splice(i,1);save();render()};
+function addCat(){const n=$('#nc').value.trim();if(n){S.cats.push({n,b:0,c:COL[S.cats.length%COL.length]});save();render()}}
+// ===== 6. ADD INCOME / EXPENSE FORM =====
+// openAdd: draws the full-screen form (green for income, blue for expense). Typed values are kept in dr.
+function openAdd(){
+ const inc=kind=='inc',hc=inc?'#4caf50':'#2196f3',srcs=[...new Set(S.inc.map(x=>x.s))];
+ if(dr.c>=S.cats.length)dr.c=0;
+ $('#sh').innerHTML=`<div class="ad"><div class="ah" style="background:${hc}"><div class="ar"><button onclick="closeAdd()">←</button><b>${inc?'New Income':'New Expense'}</b><div class="tg"><button class="${inc?'':'on'}" onclick="kind='exp';openAdd()">Expense</button><button class="${inc?'on':''}" onclick="kind='inc';openAdd()">Income</button></div></div><small>Amount (CAD)</small><input class="big" type="number" inputmode="decimal" step="0.01" placeholder="0.00" value="${esc(dr.a)}" oninput="dr.a=this.value" id="a"></div>
+ <div class="ab"><div class="ch">${[['Today',today],['Yesterday',yest]].map(([l,d])=>`<button class="cp ${dr.d==d?'on':''}" onclick="dr.d='${d}';openAdd()">${l}</button>`).join('')}<input type="date" value="${dr.d}" onchange="dr.d=this.value;openAdd()"></div>
+ ${inc?`<input placeholder="Source (e.g. Job 1, Side gig)" value="${esc(dr.s)}" oninput="dr.s=this.value"><div class="ch" style="flex-wrap:wrap">${srcs.map(s=>`<button class="cp" data-s="${esc(s)}" onclick="dr.s=this.dataset.s;openAdd()">${esc(s)}</button>`).join('')}</div>`:`<div class="cgr">${S.cats.map((c,i)=>`<button class="cg ${dr.c==i?'on':''}" onclick="dr.c=${i};openAdd()">${ic(c.n,c.c)}<small>${esc(c.n)}</small></button>`).join('')}</div>`}
+ <input placeholder="Description (optional)" value="${esc(dr.n)}" oninput="dr.n=this.value"></div><button class="okb" onclick="add()">✓</button></div>`;
+ $('#sh').classList.add('open')}
+// closeAdd: hides the form and clears the draft
+const closeAdd=()=>{$('#sh').classList.remove('open');$('#sh').innerHTML='';dr={a:'',d:today,n:'',s:'',c:dr.c}};
+// add: checks the amount, saves the new income/expense, then shows the Dashboard for that month
+function add(){
+ const a=parseFloat(dr.a);if(!(a>0))return $('#a').focus();
+ const d=dr.d||today,id=Date.now(),n=dr.n.trim();
+ if(kind=='exp')S.exp.push({id,cat:(S.cats[dr.c]||{n:'Other'}).n,a,d,n});else S.inc.push({id,s:(dr.s||'').trim()||'Income',a,d,n});
+ cur=d.slice(0,7);sel=-1;save();closeAdd();go('home')}
+// ===== 7. BACKUP =====
+// exp: downloads all your data as a .json file. imp: restores your data from one.
+function exp(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));a.download='budget-backup-'+today+'.json';a.click()}
+function imp(f){const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.cats||!d.exp||!d.inc)throw 0;S=d;if(!S.goal)S.goal={n:'Savings goal',g:0,s:0};save();render()}catch(e){alert('Invalid backup file')}};r.readAsText(f.files[0])}
+// ===== 8. START THE APP =====
+// Draw the first screen, then register the service worker (lets the app work offline)
+render();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>

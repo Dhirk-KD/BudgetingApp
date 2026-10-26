@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="icon.png">
 <title>Budget</title>
 <!-- All the design (colours, spacing, layout) lives in style.css -->
-<link rel="stylesheet" href="Style.css">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <!-- Every page is drawn into this <main> by JavaScript -->
@@ -298,18 +298,70 @@ function prof(){
  <input type="number" inputmode="decimal" value="${S.pf.tv||''}" placeholder="${S.pf.tm=='a'?'Dollars per month, e.g. 300':'Percent of monthly income, e.g. 20'}" onchange="S.pf.tv=parseFloat(this.value)||0;save()">
  <small>${S.pf.tm=='a'?'The same fixed amount every month.':'Changes with the income you log each month.'}</small>
  <h3 style="margin-top:16px">App</h3><button class="b2" onclick="S.t=S.t=='dark'?'light':'dark';save();render()">Switch to ${S.t=='dark'?'light':'dark'} mode</button><button class="b2" onclick="exp()">Export backup</button><button class="b2" onclick="$('#f').click()">Import backup</button><input id="f" type="file" accept=".json" hidden onchange="imp(this)"></div>`}
+// ===== 4d. INSIGHTS PAGE & SHARE WITH AI =====
+// subs = recurring charges found on the Insights page (used by the "Add to Fixed bills" chips). wd = weekday names.
+let subs=[];const wd=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+// aiText: the summary you can paste into an AI chat. It only has totals per category: no notes, names or individual transactions.
+function aiText(){
+ const ms=[cur,shift(cur,-1),shift(cur,-2),shift(cur,-3)].filter(m=>{const t=tot(m);return t.i||t.e});
+ const L=["I'm sharing a summary of my monthly budget (Canada, amounts in CAD). My income is irregular because I do freelance work. Please act as a friendly budgeting coach: (1) write a short report on my spending habits, (2) point out patterns or anything unusual, (3) suggest realistic budgets per category for next month, (4) give me 3 practical ways to save more. Be specific and concise.",''];
+ if(!ms.length)L.push('(No transactions logged yet.)');
+ ms.forEach(m=>{const t=tot(m),cs=Object.entries(t.by).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} ${fm(v)}`);L.push(`${lab(m)}: income ${fm(t.i)}, spent ${fm(t.e)}, saved ${fm(t.n)}`);if(cs.length)L.push('  Spending by category: '+cs.join(', '))});
+ const bs=S.cats.filter(c=>c.b>0).map(c=>`${c.n} ${fm(c.b)}`);if(bs.length)L.push('','My monthly budgets: '+bs.join(', '));
+ const f=fxSum();if(f.t)L.push(`Fixed bills each month: about ${fm(f.t)} in total.`);
+ if(S.pf.tv)L.push(`Savings target: ${S.pf.tm=='a'?fm(S.pf.tv)+' a month':S.pf.tv+'% of income'}.`);
+ if(S.goal.g)L.push(`Savings goal: ${fm(S.goal.g)}.`);
+ return L.join('\n')}
+// copyAi: copies the summary to the clipboard (cpFb is a fallback for browsers that block the clipboard)
+const cpFb=ok=>{const t=$('#ai');t.removeAttribute('readonly');t.select();t.setSelectionRange(0,99999);try{document.execCommand('copy');ok()}catch(e){}t.setAttribute('readonly','')};
+const copyAi=b=>{const ok=()=>{b.textContent='Copied ✓ now paste it into your chat'};if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(aiText()).then(ok,()=>cpFb(ok));else cpFb(ok)};
+// subFx: opens the New fixed bill form filled in from a recurring charge found on the Insights page
+const subFx=j=>{const s=subs[j];newFx();fr.n=s.n;fr.a=String(s.a);fr.c=Math.max(0,S.cats.findIndex(c=>c.n==s.cat));fr.day=s.day;drawFx()};
+// insp: the Insights page. Everything here is calculated on your phone from your own data (no AI service, nothing is sent anywhere).
+// Sections: monthly report, forecast, budget suggestions, unusual spending, subscriptions, freelance helper, what-if, share with AI.
+function insp(){
+ const t=tot(cur),p=tot(shift(cur,-1)),ex=S.exp.filter(x=>x.d.startsWith(cur));
+ const[y,mo]=cur.split('-').map(Number),dim=new Date(y,mo,0).getDate(),left=cur==TM?dim-D.getDate()+1:0,done=cur==TM?D.getDate():dim;
+ const B=S.cats.reduce((a,c)=>a+(c.b||0),0),box=(h,b)=>`<div class="box"><h3>${h}</h3>${b}</div>`;
+ // 1. Monthly report: change vs last month, busiest weekday, top categories, biggest expenses
+ const chg=p.e>0?(t.e-p.e)/p.e*100:null,dw=Array(7).fill(0);ex.forEach(x=>dw[new Date(x.d+'T00:00').getDay()]+=x.a);
+ const tp=Object.entries(t.by).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v])=>`<div class="lr">${ic(k,col(k))}<div>${esc(k)}<br><small>${(v/t.e*100).toFixed(0)}% of spending</small></div><b>${fm(v)}</b></div>`).join('');
+ const bg=[...ex].sort((a,b)=>b.a-a.a).slice(0,3).map(x=>`<div class="lr"><div>${esc(x.n||x.cat)}<br><small>${esc(x.cat)} · ${dl(x.d)}</small></div><b>${fm(x.a)}</b></div>`).join('');
+ const rpt=t.e?`<p style="margin-top:0">You spent <b>${fm(t.e)}</b> in ${lab(cur)}${chg==null?'.':`, <span class="${chg>0?'bad':'ok'}">${Math.abs(chg).toFixed(0)}% ${chg>0?'more':'less'}</span> than ${lab(shift(cur,-1),1)}.`} You spend the most on <b>${wd[dw.indexOf(Math.max(...dw))]}s</b>.</p><small>Top categories</small>${tp}<small>Biggest expenses</small>${bg}`:'<div class="empty">No spending logged for this month yet.</div>';
+ // 2. Forecast (current month only): projected month-end spending and a safe amount to spend per day
+ const cap=B>0?B:t.i,rm=cap-t.e,what=B>0?'your budgets':'your income';
+ const fc=cur==TM&&t.e>0?`<p style="margin-top:0">At this pace you will spend about <b>${fm(t.e/done*dim)}</b> by the end of the month. Big bills early in the month can make this look high.</p>${cap>0&&left>0?`<p>${rm>=0?`You can spend about <b>${fm(rm/left)}</b> a day for the next ${left} days and stay within ${what}.`:`You are already <b class="bad">${fm(-rm)}</b> over ${what} this month.`}</p>`:''}`:'';
+ // 3. Budget suggestions: average of the last 3 months per category plus 5%, rounded up to $10
+ const hs=[1,2,3].map(k=>shift(cur,-k)).filter(m=>tot(m).e>0),hb=hs.map(tot);
+ const sg=hs.map?S.cats.map((c,i)=>{const a=hb.reduce((s,x)=>s+(x.by[c.n]||0),0)/hs.length;if(!a)return'';const sv=Math.ceil(a*1.05/10)*10,ov=c.b>0?hb.filter(x=>(x.by[c.n]||0)>c.b).length:0;return `<div class="tx">${ic(c.n,c.c)}<div>${esc(c.n)}<br><small>avg ${fm(a)}/mo · budget ${c.b?fm(c.b):'none'}${ov?` · over in ${ov} of ${hs.length}`:''}</small></div>${sv!==c.b?`<span class="chip" style="cursor:pointer;background:var(--hd);color:#fff" onclick="S.cats[${i}].b=${sv};save();render()">Set ${fm(sv)}</span>`:'<small>✓ set</small>'}</div>`}).join(''):'';
+ // 4. Unusual spending: an expense of $50+ that is more than double your usual for that category (needs 3+ earlier expenses)
+ const un=ex.map(x=>{const o=S.exp.filter(y=>y.cat==x.cat&&!y.d.startsWith(cur)),a=o.length>=3?o.reduce((s,y)=>s+y.a,0)/o.length:0;return a&&x.a>=50&&x.a>2*a?`<p><b>${esc(x.cat)}</b> ${fm(x.a)} on ${dl(x.d)} is about ${(x.a/a).toFixed(1)}x your usual ${fm(a)}.</p>`:''}).filter(Boolean).slice(0,3).join('');
+ // 5. Subscription finder: same description and amount in 2+ different months (and not already a fixed bill)
+ const g={};S.exp.filter(x=>!x.fx&&x.n).forEach(x=>{const k=x.n.toLowerCase()+'|'+x.a;(g[k]=g[k]||[]).push(x)});
+ subs=Object.values(g).filter(a=>new Set(a.map(x=>x.d.slice(0,7))).size>=2&&!S.fx.some(b=>b.n.toLowerCase()==a[0].n.toLowerCase())).map(a=>{const l=a[a.length-1];return{n:l.n,a:l.a,cat:l.cat,day:+l.d.slice(8),m:new Set(a.map(x=>x.d.slice(0,7))).size}}).slice(0,5);
+ const sb=subs.map((s,j)=>`<div class="tx">${ic(s.cat,col(s.cat))}<div>${esc(s.n)}<br><small>${fm(s.a)} · seen in ${s.m} months</small></div><span class="chip" style="cursor:pointer" onclick="subFx(${j})">Add to Fixed bills</span></div>`).join('');
+ // 6. Freelance helper: compare budgets with your lowest recent income month, and a tax set-aside calculator
+ const i6=[...Array(6)].map((_,k)=>tot(shift(cur,-k)).i).filter(v=>v>0),low=i6.length?Math.min(...i6):0,rate=S.pf.tx!=null?S.pf.tx:20;
+ const fl=`<p style="margin-top:0">${low?`Your lowest income month recently was <b>${fm(low)}</b>.${B>low?` Your budgets add up to ${fm(B)}, so a slow month like that could leave you short.`:' Your budgets fit within it, so you are covered even in a slow month.'}`:'Log some income to see how your slow months compare to your budgets.'}</p><p>Set aside <input type="number" inputmode="decimal" value="${rate}" onchange="S.pf.tx=parseFloat(this.value)||0;save();render()" style="width:72px;display:inline-block;margin:0 6px">% of this month's income for taxes = <b>${fm(t.i*rate/100)}</b>.</p><small>Choose a rate that matches what you expect to owe. An accountant can help you pick one.</small>`;
+ // 7. What-if: how much sooner you reach your savings goal if you spend a little less each month
+ const mm=[...new Set([...S.inc,...S.exp].map(x=>x.d.slice(0,7)))],net=mm.reduce((a,m)=>a+tot(m).n,0),av=mm.length?net/mm.length:0,gl=S.goal.g,rg=gl-(S.goal.s+net),cut=S.pf.wi!=null?S.pf.wi:50;
+ const m1=av>0?Math.ceil(rg/av):0,m2=av+cut>0?Math.ceil(rg/(av+cut)):0;
+ const wi=!gl?'<small>Set a savings goal on the Savings page to see this.</small>':rg<=0?'<p style="margin:0">You have already reached your goal. 🎉</p>':`<p style="margin-top:0">If you cut <input type="number" inputmode="decimal" value="${cut}" onchange="S.pf.wi=parseFloat(this.value)||0;save();render()" style="width:80px;display:inline-block;margin:0 6px"> a month from your spending, you would reach your goal in <b>${m2||'?'} months</b>${m1?` instead of ${m1} (${m1-m2} sooner)`:''}.</p>`;
+ // 8. Share with AI: shows exactly what will be copied, then you paste it into your own AI chat
+ const sh=`<small>Get deeper advice from your own AI chat. Only totals per category are included: no notes, names or individual transactions. This is what will be copied:</small><textarea class="ta" id="ai" readonly>${esc(aiText())}</textarea><div class="ch"><button class="b1" onclick="copyAi(this)">Copy summary</button><a class="b2 lk" href="https://claude.ai/new" target="_blank" rel="noopener">Open Claude</a></div><small>Paste it into the chat and ask for your report.</small>`;
+ return hd('Insights',1)+`<div class="sheet">${box('Monthly report',rpt)}${fc?box('Forecast',fc):''}${box('Budget suggestions',hs.length?'<small>Based on your last '+hs.length+' month'+(hs.length>1?'s':'')+' of spending, plus 5% breathing room.</small>'+sg:'<small>Log expenses for at least one full month to get suggestions.</small>')}${un?box('Unusual spending',un):''}${sb?box('Looks like a subscription',sb):''}${box('Freelance income',fl)}${box('What if you spend less?',wi)}${box('Share with AI',sh)}</div>`}
 // ===== 5. SCREEN CONTROLS =====
 // render: redraws the current page and highlights the matching nav button. Called after every change.
 function render(){
  document.documentElement.dataset.t=S.t;
- $('main').innerHTML={home,tx:txp,sav:savp,fix:fixp,calc:calcp,pro:prof,hist,cmp:cmpv,set:sett}[tab]();
+ $('main').innerHTML={home,tx:txp,sav:savp,fix:fixp,calc:calcp,ins:insp,pro:prof,hist,cmp:cmpv,set:sett}[tab]();
  const nt=tab;
  document.querySelectorAll('nav [data-t]').forEach(b=>b.classList.toggle('on',b.dataset.t==nt))}
 // go = switch page, mv = previous/next month, pick = highlight/unhighlight a donut slice
 const go=t=>{tab=t;render();scrollTo(0,0)},mv=k=>{cur=shift(cur,k);sel=-1;render()},pick=i=>{sel=sel===i?-1:i;render()};
 // menu: opens (1) or closes (0) the slide-out page menu (the ☰ button, top right). Lists every page; the current one is highlighted.
 function menu(o){
- if(o)$('#dr').innerHTML=`<div class="dw"><h3>Pages</h3>${[['home','Dashboard','◔'],['tx','Transactions','☰'],['sav','Savings','◈'],['fix','Fixed bills','🔁'],['calc','Income calculator','🎯'],['hist','History','📅'],['cmp','Compare','⇄'],['pro','Profile','👤'],['set','Budgets &amp; settings','⚙']].map(([k,l,g])=>`<button class="${tab==k?'on':''}" onclick="menu(0);go('${k}')"><span>${g}</span>${l}</button>`).join('')}</div>`;
+ if(o)$('#dr').innerHTML=`<div class="dw"><h3>Pages</h3>${[['home','Dashboard','◔'],['tx','Transactions','☰'],['sav','Savings','◈'],['fix','Fixed bills','🔁'],['calc','Income calculator','🎯'],['hist','History','📅'],['cmp','Compare','⇄'],['ins','Insights','💡'],['pro','Profile','👤'],['set','Budgets &amp; settings','⚙']].map(([k,l,g])=>`<button class="${tab==k?'on':''}" onclick="menu(0);go('${k}')"><span>${g}</span>${l}</button>`).join('')}</div>`;
  $('#dr').classList.toggle('open',!!o)}
 // del = delete a transaction, delCat = delete a category (Settings)
 const del=(k,id)=>{const x=S[k].find(y=>y.id===id);if(x&&x.fx){S.sk=S.sk||[];S.sk.push(x.fx)}S[k]=S[k].filter(y=>y.id!==id);save();render()};
